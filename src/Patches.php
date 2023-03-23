@@ -406,16 +406,36 @@ class Patches implements PluginInterface, EventSubscriberInterface {
     // In some rare cases, git will fail to apply a patch, fallback to using
     // the 'patch' command.
     if (!$patched) {
-      // This is a workaround for the outdated patch version on BSD
-      // systems which doesn't support this option -> use posix then.
-      // --no-backup-if-mismatch here is a hack that fixes some
-      // differences between how patch works on windows and unix.
+      // check if we have patch installed
+      $patch_bins = ["gpatch", "patch"];
+      $patch_err_msg = "";
+      $valid_patch_command = false;
+      foreach ($patch_bins as $patch_bin) {
+          $valid_patch_command = ($this->executor->execute('command -v ' . $patch_bin, $outputPatchPath) === 0);
+          if ($valid_patch_command) {
+              break;
+          } else {
+              $patch_err_msg .= "Cannot find \"$patch_bin\" command; ";
+          }
+      }
+      if (!$valid_patch_command) {
+          throw new \Exception($patch_err_msg . "No working patch found!");
+      }
       $patch_options = '--no-backup-if-mismatch';
-      if (PHP_OS_FAMILY == 'BSD' || in_array(PHP_OS, ['FreeBSD', 'NetBSD', 'OpenBSD'])) {
-          $patch_options = '--posix --batch';
+      // sniff if we're not using GNU patch
+      $patchVersion = '';
+      $this->executor->execute($patch_bin . ' --version', $patchVersion);
+      if (strpos($patchVersion, 'GNU patch') === false) {
+          $patch_options = ['--posix', '--batch'];
       }
       foreach ($patch_levels as $patch_level) {
-        if ($patched = $this->executeCommand("patch %s %s -d %s < %s", $patch_level, $patch_options, $install_path, $filename)) {
+        if ($patched = $this->executeCommand(
+          $patch_bin . " %s %s -d %s < %s",
+          $patch_level,
+          $patch_options,
+          $install_path,
+          $filename)
+        ) {
           break;
         }
       }
@@ -478,7 +498,15 @@ class Patches implements PluginInterface, EventSubscriberInterface {
     $args = func_get_args();
     foreach ($args as $index => $arg) {
       if ($index !== 0) {
-        $args[$index] = escapeshellarg($arg);
+        if (is_array($arg)) {
+          $args[$index] = '';
+          foreach ($arg as $option) {
+            $args[$index] .= ' ' . escapeshellarg($option);
+          }
+        }
+        else {
+          $args[$index] = escapeshellarg($arg);
+        }
       }
     }
 
