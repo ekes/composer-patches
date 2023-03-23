@@ -426,7 +426,7 @@ class Patches implements PluginInterface, EventSubscriberInterface {
       $patchVersion = '';
       $this->executor->execute($patch_bin . ' --version', $patchVersion);
       if (strpos($patchVersion, 'GNU patch') === false) {
-          $patch_options = ['--posix', '--batch'];
+          $patch_options = ['-Vnone', '--batch'];
       }
       foreach ($patch_levels as $patch_level) {
         if ($patched = $this->executeCommand(
